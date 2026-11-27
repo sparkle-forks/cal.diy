@@ -455,10 +455,16 @@ Note: `docker compose` without the hyphen is now the primary method of using doc
 
 5. Start Cal.diy via docker compose
 
-   To run the complete stack, which includes a local Postgres database, Cal.diy web app, and Prisma Studio:
+   To run the complete stack, which includes a local Postgres database and the Cal.diy web app:
 
    ```bash
    docker compose up -d
+   ```
+
+   Prisma Studio is not started by default because it has no authentication. To also start it (bound to `127.0.0.1:5555` only), add the `studio` profile:
+
+   ```bash
+   docker compose --profile studio up -d
    ```
 
    To run Cal.diy web app and Prisma Studio against a remote database, ensure that DATABASE_URL is configured for an available database and run:
@@ -538,10 +544,16 @@ Note: `docker compose` without the hyphen is now the primary method of using doc
 
 6. Start Cal.diy via docker compose
 
-   To run the complete stack, which includes a local Postgres database, Cal.diy web app, and Prisma Studio:
+   To run the complete stack, which includes a local Postgres database and the Cal.diy web app:
 
    ```bash
    docker compose up -d
+   ```
+
+   Prisma Studio is not started by default because it has no authentication. To also start it (bound to `127.0.0.1:5555` only), add the `studio` profile:
+
+   ```bash
+   docker compose --profile studio up -d
    ```
 
    To run Cal.diy web app and Prisma Studio against a remote database, ensure that DATABASE_URL is configured for an available database and run:

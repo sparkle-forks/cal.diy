@@ -1,12 +1,11 @@
-import type { NextApiRequest, NextApiResponse } from "next";
-import { z } from "zod";
-
 import { getSafeRedirectUrl } from "@calcom/lib/getSafeRedirectUrl";
+import { HttpError } from "@calcom/lib/http-error";
 import logger from "@calcom/lib/logger";
 import { defaultHandler } from "@calcom/lib/server/defaultHandler";
 import { defaultResponder } from "@calcom/lib/server/defaultResponder";
 import prisma from "@calcom/prisma";
-
+import type { NextApiRequest, NextApiResponse } from "next";
+import { z } from "zod";
 import getInstalledAppPath from "../../_utils/getInstalledAppPath";
 import { decodeOAuthState } from "../../_utils/oauth/decodeOAuthState";
 import { LARK_HOST } from "../common";
@@ -21,7 +20,18 @@ const callbackQuerySchema = z.object({
 
 async function getHandler(req: NextApiRequest, res: NextApiResponse) {
   const { code } = callbackQuerySchema.parse(req.query);
+
+  const userId = req.session?.user?.id;
+  if (!userId) {
+    throw new HttpError({ statusCode: 401, message: "You must be logged in to do this" });
+  }
+
+  // decodeOAuthState only returns a state whose HMAC nonce was issued to this session's user,
+  // which blocks login-CSRF from binding the victim's credential to an attacker's Lark account.
   const state = decodeOAuthState(req);
+  if (!state) {
+    throw new HttpError({ statusCode: 400, message: "Invalid or missing OAuth state" });
+  }
 
   try {
     const appAccessToken = await getAppAccessToken();
@@ -62,9 +72,10 @@ async function getHandler(req: NextApiRequest, res: NextApiResponse) {
      */
     const currentCredential = await prisma.credential.findFirst({
       where: {
-        userId: req.session?.user.id,
+        userId,
         type: "lark_calendar",
       },
+      select: { id: true },
     });
 
     if (!currentCredential) {
@@ -72,7 +83,7 @@ async function getHandler(req: NextApiRequest, res: NextApiResponse) {
         data: {
           type: "lark_calendar",
           key,
-          userId: req.session?.user.id,
+          userId,
           appId: "lark-calendar",
         },
       });
@@ -81,12 +92,13 @@ async function getHandler(req: NextApiRequest, res: NextApiResponse) {
         data: {
           type: "lark_calendar",
           key,
-          userId: req.session?.user.id,
+          userId,
           appId: "lark-calendar",
         },
         where: {
           id: currentCredential.id,
         },
+        select: { id: true },
       });
     }
 
@@ -104,10 +116,10 @@ async function getHandler(req: NextApiRequest, res: NextApiResponse) {
     if (primaryCalendarResponse.status === 200) {
       const primaryCalendar = await primaryCalendarResponse.json();
 
-      if (primaryCalendar.data.calendars.calendar.calendar_id && req.session?.user?.id) {
+      if (primaryCalendar.data.calendars.calendar.calendar_id) {
         await prisma.selectedCalendar.create({
           data: {
-            userId: req.session?.user.id,
+            userId,
             integration: "lark_calendar",
             externalId: primaryCalendar.data.calendars.calendar.calendar_id as string,
             credentialId: currentCredential?.id,
@@ -122,7 +134,7 @@ async function getHandler(req: NextApiRequest, res: NextApiResponse) {
     );
   } catch (error) {
     log.error("handle callback error", error);
-    res.redirect(state?.returnTo ?? "/apps/installed");
+    res.redirect(state.returnTo ?? "/apps/installed");
   }
 }
 
