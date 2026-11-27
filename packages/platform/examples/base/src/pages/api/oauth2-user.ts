@@ -1,8 +1,9 @@
 // Next.js API route support: https://nextjs.org/docs/api-routes/introduction
-import type { NextApiRequest, NextApiResponse } from "next";
 
+import process from "node:process";
 import { X_CAL_CLIENT_ID, X_CAL_SECRET_KEY } from "@calcom/platform-constants";
-
+import type { NextApiRequest, NextApiResponse } from "next";
+import { isLocalDevRequest } from "../../lib/isLocalDevRequest";
 import prisma from "../../lib/prismaClient";
 
 type Data = {
@@ -12,8 +13,12 @@ type Data = {
   accessToken: string;
 };
 
-// example endpoint to create a managed cal.com user
+// example endpoint to create an OAuth 2.0 cal.com user; it returns live access tokens, so it is restricted to local development
 export default async function handler(req: NextApiRequest, res: NextApiResponse<Data>) {
+  if (!isLocalDevRequest(req)) {
+    return res.status(404).end();
+  }
+
   const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body;
   const { email, authorizationCode } = body;
 
@@ -41,12 +46,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
     "Keith",
     "https://images.unsplash.com/photo-1527980965255-d3b416303d12?q=80&w=3023&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
   );
-  
 
   return res.status(200).json(oAuthUser);
 }
 
-async function createOAuthUser(authorizationCode:string, email: string, name: string, avatarUrl: string) {
+async function createOAuthUser(authorizationCode: string, email: string, name: string, avatarUrl: string) {
   const localUser = await prisma.user.create({
     data: {
       email,
@@ -76,16 +80,13 @@ async function createOAuthUser(authorizationCode:string, email: string, name: st
   const acccessToken = exchangeResponseBody.data.access_token;
   const refreshToken = exchangeResponseBody.data.refresh_token;
 
-  const me = await fetch(
-    `${process.env.NEXT_PUBLIC_CALCOM_API_URL ?? ""}/me`,
-    {
-      headers: {
-        "Content-Type": "application/json",
-        // eslint-disable-next-line turbo/no-undeclared-env-vars
-        Authorization: `Bearer ${acccessToken}`,
-      },
-    }
-  );
+  const me = await fetch(`${process.env.NEXT_PUBLIC_CALCOM_API_URL ?? ""}/me`, {
+    headers: {
+      "Content-Type": "application/json",
+      // eslint-disable-next-line turbo/no-undeclared-env-vars
+      Authorization: `Bearer ${acccessToken}`,
+    },
+  });
 
   const meResponseBody = await me.json();
 
@@ -99,5 +100,5 @@ async function createOAuthUser(authorizationCode:string, email: string, name: st
     where: { id: localUser.id },
   });
 
-  return {...meResponseBody.data, accessToken: acccessToken};
+  return { ...meResponseBody.data, accessToken: acccessToken };
 }

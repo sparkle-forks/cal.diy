@@ -1,8 +1,9 @@
 // Next.js API route support: https://nextjs.org/docs/api-routes/introduction
-import type { NextApiRequest, NextApiResponse } from "next";
 
+import process from "node:process";
 import { X_CAL_CLIENT_ID, X_CAL_SECRET_KEY } from "@calcom/platform-constants";
-
+import type { NextApiRequest, NextApiResponse } from "next";
+import { isLocalDevRequest } from "../../lib/isLocalDevRequest";
 import prisma from "../../lib/prismaClient";
 
 type Data = {
@@ -55,8 +56,12 @@ async function createUserWithDefaultSchedule(email: string, name: string, avatar
   return managedUserResponseBody.data;
 }
 
-// example endpoint to create a managed cal.com user
+// example endpoint to create a managed cal.com user; it returns live access tokens, so it is restricted to local development
 export default async function handler(req: NextApiRequest, res: NextApiResponse<Data>) {
+  if (!isLocalDevRequest(req)) {
+    return res.status(404).end();
+  }
+
   const { emails } = JSON.parse(req.body);
   const emailOne = emails[0];
   const emailTwo = emails[1];
@@ -64,7 +69,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse<
   const emailFour = emails[3];
   const emailFive = emails[4];
 
-  const existingUser = await prisma.user.findFirst({ orderBy: { createdAt: "desc" } });
+  const existingUser = await prisma.user.findFirst({
+    orderBy: { createdAt: "desc" },
+    select: { calcomUserId: true, email: true, calcomUsername: true, accessToken: true },
+  });
   if (existingUser && existingUser.calcomUserId) {
     return res.status(200).json({
       id: existingUser.calcomUserId,
